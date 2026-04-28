@@ -726,10 +726,46 @@ ${itemLines}
     console.error('Telegram notification error:', err);
   }
 }
+// ─── TELEGRAM CANCELLATION ────────────────────────────────────────────────────
+async function sendTelegramCancellation() {
+  try {
+    const itemLines = state.cart.map(item => {
+      const size = item.size ? ` (${item.size})` : '';
+      return `  • ${item.emoji} ${item.name}${size} × ${item.count}`;
+    }).join('\n');
 
+    const now = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+
+    const message =
+`❌ *ORDER CANCEL HO GAYA!* ❌
+━━━━━━━━━━━━━━━━━━
+🪑 *Table No:* ${state.tableNo}
+👤 *Customer:* ${state.customerName}
+🕐 *Time:* ${now}
+━━━━━━━━━━━━━━━━━━
+🛒 *Cancelled Items:*
+${itemLines}
+━━━━━━━━━━━━━━━━━━
+📍 Sabri Chicken Fry Corner`;
+
+    const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: TELEGRAM_CHAT_ID,
+        text: message,
+        parse_mode: 'Markdown'
+      })
+    });
+  } catch (err) {
+    console.error('Telegram cancellation error:', err);
+  }
+  }
 // ─── PLACE ORDER ──────────────────────────────────────────────────────────────
 function placeOrder() {
   state.step = 'done';
+  state.orderCancelled = false;
 
   // ✅ Telegram pe notification bhejo jab customer confirm kare
   sendTelegramNotification();
@@ -741,6 +777,47 @@ function placeOrder() {
        Table No. <b>${state.tableNo}</b> par aapka order <b>10-15 minutes</b> mein aa jayega! 🍗🔥<br><br>
        <span style="font-size:0.78rem;color:#aaa;">Hamara khana khane ka shukriya!</span>`
     );
+
+    // ✅ Cancel button add karo
+    const cancelWrap = chatArea.lastChild.querySelector('.bubble');
+    const cancelOrderBtn = document.createElement('button');
+    cancelOrderBtn.className = 'cancel-btn';
+    cancelOrderBtn.textContent = '❌ Order Cancel Karein';
+    cancelOrderBtn.style.marginTop = '10px';
+    cancelOrderBtn.onclick = () => {
+      cancelOrderBtn.remove();
+      sendTelegramCancellation();
+      addMsg('bot',
+        `❌ <b>Aapka order cancel ho gaya!</b><br>
+         Table No. <b>${state.tableNo}</b> ka order humne cancel kar diya hai.<br><br>
+         <span style="font-size:0.78rem;color:#aaa;">Agar dobara order karna ho to neeche button dabayein.</span>`
+      );
+      state.orderCancelled = true;
+      state.cart = [];
+      state.step = 'done';
+
+      setTimeout(() => {
+        const b = addMsg('bot', `Kya aap naya order karna chahenge? 😊`);
+        const btn = document.createElement('button');
+        btn.className = 'more-order-btn';
+        btn.textContent = '🔁 Naya Order Karein';
+        btn.onclick = () => {
+          state.cart = [];
+          state.step = 'menu';
+          state.customerName = '';
+          state.tableNo = '';
+          btn.remove();
+          showMenu();
+          chatInput.placeholder = 'Kuch likhein ya menu se order karein...';
+        };
+        b.appendChild(btn);
+        scrollBottom();
+      }, 800);
+
+      scrollBottom();
+    };
+    cancelWrap.appendChild(cancelOrderBtn);
+    scrollBottom();
 
     setTimeout(() => {
       typing(() => {
@@ -762,8 +839,7 @@ function placeOrder() {
       }, 1000);
     }, 1000);
   }, 800);
-}
-
+  }
 // ─── USER INPUT HANDLER ───────────────────────────────────────────────────────
 function handleUserInput() {
   const val = chatInput.value.trim();
